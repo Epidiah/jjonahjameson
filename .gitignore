@@ -1,0 +1,7 @@
+jjjdiscord.log
+shdb_*.kb
+.env
+env/
+shouts.csv
+__pycache__/
+*~
