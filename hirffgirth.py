@@ -11,7 +11,7 @@ async def get_hirffgirth(url):
             if response.status != 200:
                 return None
             else:
-                heathsoup = BeautifulSoup(response.text())
+                heathsoup = BeautifulSoup(await response.text(), "html5lib")
                 img_url = heathsoup.find_all("picture", class_="item-comic-image")[
                     0
                 ].contents[0]["src"]
@@ -36,10 +36,12 @@ async def random_hirffgirth():
 async def hirffgirth_by_date(date_str):
     if "/" in date_str:
         date_str = date_str.replace("/", "-")
-    a, b, c = date_str.split("-")
-    if len(c) == 4:
-        a, c = c, a
-    date_str = "-".join([a, b.zfill(2), c.zfill(2)])
+    date_list = date_str.split("-")
+    if len(date_list[-1]) == 4:
+        m, d, y = date_list
+    else:
+        y, m, d = date_list
+    date_str = "-".join([y, m.zfill(2), d.zfill(2)])
     url = urlizer(datetime.fromisoformat(date_str))
     return await get_hirffgirth(url)
 

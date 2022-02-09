@@ -176,7 +176,7 @@ async def on_message(message):
 
     # Skull Squadron SKULL SQUADRON!!!
 
-    if SKULL_SQUADRON.search(message.content, flags=re.IGNORECASE):
+    if SKULL_SQUADRON.search(message.content.lower()):
         await message.add_reaction(chr(int("2620", 16)))
         skull = choices(
             ["Skull", "SKULL", ":skull:", ":skull_crossbones:"], [49, 49, 1, 1]
@@ -206,36 +206,38 @@ async def on_message(message):
     # Important Heathcliff Discourse
 
     if JJJ.user in message.mentions and chnl.name == "important-heathcliff-discourse":
-        if "today" in msg.content:
-            hmg = hg.todays_hirffgirth()
+        check_archives = True
+        if "today" in message.content:
+            check_archives = False
+            hmg = await hg.todays_hirffgirth()
             if hmg:
-                await chnl.send(random.choice(HMG_COMMENTS))
-                await chnl.send(file=discord.File(hmg, "hrfgrf.gif"))
+                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
             else:
                 await chnl.send(
                     "Parker hasn't come back with those photos yet. WHERE'S PARKER?!?"
                 )
-        if "yesterday" in msg.conent:
-            hmg = hg.hirffgirth_by_days_ago(1)
+        if "yesterday" in message.content:
+            check_archives = False
+            hmg = await hg.hirffgirth_by_days_ago(1)
             if hmg:
-                await chnl.send(random.choice(HMG_COMMENTS))
-                await chnl.send(file=discord.File(hmg, "hrfgrf.gif"))
+                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
             else:
                 await chnl.send("You want cat pictures, waste Parker's time, not mine!")
-        if "random" in msg.content:
-            hmg = hg.random_hirffgirth()
+        if "random" in message.content:
+            check_archives = False
+            hmg = await hg.random_hirffgirth()
             if hmg:
-                await chnl.send(random.choice(HMG_COMMENTS))
-                await chnl.send(file=discord.File(hmg, "hrfgrf.gif"))
+                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
             else:
                 await chnl.send("You want cat pictures, waste Parker's time, not mine!")
 
-        for d_m in DATE_MATCH.findall(msg.content):
-            await chnl.send(file=discord.File(hg.hirffgirth_by_date(d_m), "hrfgrf.gif"))
-        else:
-            await chnl.send(
-                "Check the archives yourself, I've got a newspaper to run here!"
-            )
+        for d_m in DATE_MATCH.findall(message.content):
+            check_archives = False
+            hmg = await hg.hirffgirth_by_date(d_m)
+            if hmg:
+                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
+        if check_archives:
+            await chnl.send("Check the archives yourself: https://www.gocomics.com/heathcliff \nI have a newspaper to run here!")
         return
 
     msg = message.clean_content
