@@ -1,46 +1,63 @@
-# bot.py
+#!/usr/bin/env python3
+
 import csv
+import datetime
+import logging
 import os
 import pickle
-import discord
-import datetime
 import re
+
 from pathlib import Path
 from random import randint, choice, choices
+
 from dotenv import load_dotenv
-import logging
+import discord
 
 from TMNT import is_turtle_power, bio_e, clean_text, HALF_SHELL
+import hirffgirth as hg
 
-TURTLE = chr(int('1f422',16))
-POWER = chr(int('1f50b', 16))
+#############
+# CONSTANTS #
+#############
 
-CUR_DIR = Path('/home/pi/Desktop/jjj')
+TURTLE = chr(int("1f422", 16))
+POWER = chr(int("1f50b", 16))
+CUR_DIR = Path(os.getcwd())
+with open(Path(CUR_DIR, "emojjjis.txt"), "r") as file:
+    mjs = file.read().split("\n")
+EMOJJJIS = [chr(int(mj, 16)) for mj in mjs]
 
-logger = logging.getLogger("discord")
-logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(filename=Path(CUR_DIR, "jjjdiscord.log"), encoding="utf-8", mode="w")
-handler.setFormatter(
-    logging.Formatter("%(asctime)s:%(levelname)s:%(name)s: %(message)s")
+# regexy
+SKULL_SQUADRON = re.compile(r"s.{0,1}k.{0,1}u.{0,1}l.{0,18}s.{0,1}[q|kw]")
+DATE_MATCH = re.compile(
+    r"[\d]{4}[/|-][\d]{1,2}[/|-][\d]{1,2}|[\d]{1,2}[/|-][\d]{1,2}[/|-][\d]{4}"
 )
-logger.addHandler(handler)
 
+# Juicy Secrets
 load_dotenv()
 TOKEN = os.getenv("JJJ_TOKEN")
 NSM = discord.Game("Not Spider-Man")
 NG = discord.Game("?!? I've got deadlines!")
 
-client = discord.Client(activity=NG)
+# JJonahJameson is born
+JJJ = discord.Client(activity=NG)
 
-with open(Path(CUR_DIR, "jjjemojis.txt"), "r") as file:
-    mjs = file.read().split("\n")
-emjs = [chr(int(mj, 16)) for mj in mjs]
+# Logger Setup
+logger = logging.getLogger("discord")
+logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(
+    filename=Path(CUR_DIR, "jjjdiscord.log"), encoding="utf-8", mode="w"
+)
+handler.setFormatter(
+    logging.Formatter("%(asctime)s:%(levelname)s:%(name)s: %(message)s")
+)
+logger.addHandler(handler)
 
 
 async def ask(chnl, q):
     while True:
         await chnl.send(q)
-        rsp = await client.wait_for("message", check=lambda x: x.author != client.user)
+        rsp = await JJJ.wait_for("message", check=lambda x: x.author != JJJ.user)
         if (
             rsp.content.lower().startswith("yes")
             or rsp.content.lower().startswith("yup")
@@ -55,12 +72,12 @@ async def ask(chnl, q):
 
 async def new_super(old_super, chnl):
     await chnl.send("Who are you, then?")
-    new_name = await client.wait_for("message")
+    new_name = await JJJ.wait_for("message")
     new_name = new_name.content
     await chnl.send(
         f"How am I supposed to keep track of you all?\nIf I were you and you were me, what yes or no question would you ask to tell me apart from {old_super.text}?"
     )
-    new_question = await client.wait_for("message")
+    new_question = await JJJ.wait_for("message")
     print(new_question.content)
     new_question = new_question.content
     ans = await ask(chnl, "And you would answer...?")
@@ -130,41 +147,71 @@ class AlterEgo(Answer):
 shdict = {}
 
 
-@client.event
+@JJJ.event
 async def on_ready():
-    print(f"{datetime.datetime.now()}: {client.user} has connected to:")
-    for guild in client.guilds:
+    print(f"{datetime.datetime.now()}: {JJJ.user} has connected to:")
+    for guild in JJJ.guilds:
         print(f"  --{guild}")
 
 
-@client.event
+@JJJ.event
 async def on_message(message):
     chnl = message.channel
 
-    if message.author == client.user:
+    if message.author == JJJ.user:
         return
 
-    if re.search(r"s.{0,1}k.{0,1}u.{0,1}l.{0,18}s.{0,1}q", message.content, flags=re.IGNORECASE):
-        await message.add_reaction(chr(int('2620', 16)))
-        skull = choices(['Skull', 'SKULL', ':skull:', ':skull_crossbones:'], [49, 49, 1, 1])[0]
-        squad = choice(['Squadron', 'SQUADRON'])
-        wrap = '*' * randint(0,3)
-        chorus = wrap + skull + ' ' * randint(0,1) + squad + '!' * randint(1,6) + wrap
-        if datetime.datetime(2021, 2, 1, 1, 0, 0) > datetime.datetime.now() > datetime.datetime(2021, 1, 29, 23, 00, 37):
-            with open(Path(CUR_DIR, 'shouts.csv'), 'a+', newline='') as shouts:
-                shout_writer = csv.writer(shouts, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                shout_writer.writerow([str(datetime.datetime.now()), message.author, message.content, chorus])
+    if SKULL_SQUADRON.search(message.content, flags=re.IGNORECASE):
+        await message.add_reaction(chr(int("2620", 16)))
+        skull = choices(
+            ["Skull", "SKULL", ":skull:", ":skull_crossbones:"], [49, 49, 1, 1]
+        )[0]
+        squad = choice(["Squadron", "SQUADRON"])
+        wrap = "*" * randint(0, 3)
+        chorus = wrap + skull + " " * randint(0, 1) + squad + "!" * randint(1, 6) + wrap
+        if (
+            datetime.datetime(2021, 2, 1, 1, 0, 0)
+            > datetime.datetime.now()
+            > datetime.datetime(2021, 1, 29, 23, 00, 37)
+        ):
+            with open(Path(CUR_DIR, "shouts.csv"), "a+", newline="") as shouts:
+                shout_writer = csv.writer(
+                    shouts, delimiter=" ", quotechar="|", quoting=csv.QUOTE_MINIMAL
+                )
+                shout_writer.writerow(
+                    [
+                        str(datetime.datetime.now()),
+                        message.author,
+                        message.content,
+                        chorus,
+                    ]
+                )
         await chnl.send(chorus)
-    
+
+    if JJJ.user in message.mentions and chnl.name == "important-heathcliff-discourse":
+        if "today" in msg.content:
+            await chnl.send(file=discord.File(hg.todays_hirffgirth(), "hrfgrf.gif"))
+        if "yesterday" in msg.conent:
+            await chnl.send(
+                file=discord.File(hg.hirffgirth_by_days_ago(1), "hrfgrf.gif")
+            )
+        if "random" in msg.content:
+            await chnl.send(file=discord.File(hg.random_hirffgirth(), "hrfgrf.gif"))
+
+        for d_m in DATE_MATCH.findall(msg.content):
+            await chnl.send(file=discord.File(hg.hirffgirth_by_date(d_m), "hrfgrf.gif"))
+        return
+
     msg = message.clean_content
-    msg = msg.replace('@' + client.user.display_name, '')
-    if client.user in message.mentions and chnl.name != "daily-bugle":
+    msg = msg.replace("@" + JJJ.user.display_name, "")
+
+    if JJJ.user in message.mentions and chnl.name != "daily-bugle":
         reply = " "
         for i, r in enumerate(bio_e(clean_text(msg))):
             if i:
                 reply += "\nOr "
-            rhythm = ''.join(r)
-            reply += rhythm #.replace("1","●").replace("2","◒").replace("0","○")
+            rhythm = "".join(r)
+            reply += rhythm  # .replace("1","●").replace("2","◒").replace("0","○")
             if HALF_SHELL.match(rhythm):
                 reply += " " + TURTLE + POWER
         await message.reply(reply)
@@ -174,14 +221,13 @@ async def on_message(message):
         await message.add_reaction(TURTLE)
         await message.add_reaction(POWER)
 
-        
     chnls = [x.name for x in message.guild.channels]
     if "daily-bugle" in chnls and chnl.name not in [
         "daily-bugle",
         "the-robot-testing-zone",
     ]:
         return
-    if not client.user in message.mentions:
+    if not JJJ.user in message.mentions:
         return
     print(f'{message.author} said "{message.content}" on {message.guild}.')
     try:
@@ -228,29 +274,29 @@ async def on_message(message):
             )[0]
         )
         rcts = 1
-        while randint(0, 9) >= rcts ** 2:
-            emj = choice(emjs)
+        while randint(0, 9) >= rcts**2:
+            emj = choice(EMOJJJIS)
             print(emj)  # Not needed anymore?
             await message.add_reaction(emj)
             rcts += 1
         return
     await chnl.send("get me spider-man!".upper())
     rcts = 1
-    while randint(0, 9) >= rcts ** 2:
-        emj = choice(emjs)
+    while randint(0, 9) >= rcts**2:
+        emj = choice(EMOJJJIS)
         print(emj)  # Not needed anymore?
         await message.add_reaction(emj)
         rcts += 1
-    msg = await client.wait_for("message", check=lambda m: m.author != client.user)
+    msg = await JJJ.wait_for("message", check=lambda m: m.author != JJJ.user)
     if "spider" in msg.content.lower():
-        await client.change_presence(activity=NSM)
+        await JJJ.change_presence(activity=NSM)
         await chnl.send("I see...")
         shdict[message.guild.id] = await shdict[message.guild.id].play(chnl)
         file = open(Path(CUR_DIR, f"shdb_{message.guild.id}.kb"), "wb")
         pickle.dump(shdict[message.guild.id], file)
         file.close()
         print(f"{datetime.datetime.now()}: Saved new shdb_{message.guild.id}.kb.")
-        await client.change_presence(activity=NG)
+        await JJJ.change_presence(activity=NG)
 
 
-client.run(TOKEN)
+JJJ.run(TOKEN)
