@@ -20,18 +20,31 @@ import hirffgirth as hg
 # CONSTANTS #
 #############
 
-TURTLE = chr(int("1f422", 16))
-POWER = chr(int("1f50b", 16))
 CUR_DIR = Path(os.getcwd())
-with open(Path(CUR_DIR, "emojjjis.txt"), "r") as file:
-    mjs = file.read().split("\n")
-EMOJJJIS = [chr(int(mj, 16)) for mj in mjs]
 
 # regexy
 SKULL_SQUADRON = re.compile(r"s.{0,1}k.{0,1}u.{0,1}l.{0,18}s.{0,1}[q|kw]")
 DATE_MATCH = re.compile(
     r"[\d]{4}[/|-][\d]{1,2}[/|-][\d]{1,2}|[\d]{1,2}[/|-][\d]{1,2}[/|-][\d]{4}"
 )
+
+# Personality
+with open(Path(CUR_DIR, "emojjjis.txt"), "r") as file:
+    mjs = file.read().split("\n")
+EMOJJJIS = [chr(int(mj, 16)) for mj in mjs]
+TURTLE = chr(int("1f422", 16))
+POWER = chr(int("1f50b", 16))
+HMG_COMMENTS = [
+    "This one's a beaut.",
+    "Damn funny, I'd say!",
+    "Hahahahhaha, this is why we cut Gallagher those fat checks!",
+    """My nephew says this one's "too real," whatever the heck that means.""",
+    "We need more helmet content.",
+    "This'll teach Davis to sue me.",
+    "Have Parker explain this one to you. I don't get it.",
+    "I'm the editor-in-chief, damn it, not an errand—oh, here it is.",
+    "Heathcliff, you rascal.",
+]
 
 # Juicy Secrets
 load_dotenv()
@@ -161,6 +174,8 @@ async def on_message(message):
     if message.author == JJJ.user:
         return
 
+    # Skull Squadron SKULL SQUADRON!!!
+
     if SKULL_SQUADRON.search(message.content, flags=re.IGNORECASE):
         await message.add_reaction(chr(int("2620", 16)))
         skull = choices(
@@ -188,18 +203,39 @@ async def on_message(message):
                 )
         await chnl.send(chorus)
 
+    # Important Heathcliff Discourse
+
     if JJJ.user in message.mentions and chnl.name == "important-heathcliff-discourse":
         if "today" in msg.content:
-            await chnl.send(file=discord.File(hg.todays_hirffgirth(), "hrfgrf.gif"))
+            hmg = hg.todays_hirffgirth()
+            if hmg:
+                await chnl.send(random.choice(HMG_COMMENTS))
+                await chnl.send(file=discord.File(hmg, "hrfgrf.gif"))
+            else:
+                await chnl.send(
+                    "Parker hasn't come back with those photos yet. WHERE'S PARKER?!?"
+                )
         if "yesterday" in msg.conent:
-            await chnl.send(
-                file=discord.File(hg.hirffgirth_by_days_ago(1), "hrfgrf.gif")
-            )
+            hmg = hg.hirffgirth_by_days_ago(1)
+            if hmg:
+                await chnl.send(random.choice(HMG_COMMENTS))
+                await chnl.send(file=discord.File(hmg, "hrfgrf.gif"))
+            else:
+                await chnl.send("You want cat pictures, waste Parker's time, not mine!")
         if "random" in msg.content:
-            await chnl.send(file=discord.File(hg.random_hirffgirth(), "hrfgrf.gif"))
+            hmg = hg.random_hirffgirth()
+            if hmg:
+                await chnl.send(random.choice(HMG_COMMENTS))
+                await chnl.send(file=discord.File(hmg, "hrfgrf.gif"))
+            else:
+                await chnl.send("You want cat pictures, waste Parker's time, not mine!")
 
         for d_m in DATE_MATCH.findall(msg.content):
             await chnl.send(file=discord.File(hg.hirffgirth_by_date(d_m), "hrfgrf.gif"))
+        else:
+            await chnl.send(
+                "Check the archives yourself, I've got a newspaper to run here!"
+            )
         return
 
     msg = message.clean_content
