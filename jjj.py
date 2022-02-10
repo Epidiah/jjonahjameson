@@ -45,6 +45,12 @@ HMG_COMMENTS = [
     "I'm the editor-in-chief, damn it, not an errand—oh, here it is.",
     "Heathcliff, you rascal.",
 ]
+HMG_REJECTS = [
+    "Yeah, yeah, you want Heathcliff and I want Spider-Man. We can't all get what we want!",
+    "Parker hasn't come back with those photos yet. WHERE'S PARKER?!?",
+    "You want cat pictures, waste Parker's time, not mine!",
+    "Check the archives yourself: https://www.gocomics.com/heathcliff \nI have a newspaper to run here!",
+]
 
 # Juicy Secrets
 load_dotenv()
@@ -211,33 +217,39 @@ async def on_message(message):
             check_archives = False
             hmg = await hg.todays_hirffgirth()
             if hmg:
-                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
-            else:
                 await chnl.send(
-                    "Parker hasn't come back with those photos yet. WHERE'S PARKER?!?"
+                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
                 )
+            else:
+                await chnl.send(choice(HMG_REJECTS))
         if "yesterday" in message.content:
             check_archives = False
             hmg = await hg.hirffgirth_by_days_ago(1)
             if hmg:
-                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
+                await chnl.send(
+                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
+                )
             else:
-                await chnl.send("You want cat pictures, waste Parker's time, not mine!")
+                await chnl.send(choice(HMG_REJECTS))
         if "random" in message.content:
             check_archives = False
             hmg = await hg.random_hirffgirth()
             if hmg:
-                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
+                await chnl.send(
+                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
+                )
             else:
-                await chnl.send("You want cat pictures, waste Parker's time, not mine!")
+                await chnl.send(choice(HMG_REJECTS))
 
         for d_m in DATE_MATCH.findall(message.content):
             check_archives = False
             hmg = await hg.hirffgirth_by_date(d_m)
             if hmg:
-                await chnl.send(choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif"))
+                await chnl.send(
+                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
+                )
         if check_archives:
-            await chnl.send("Check the archives yourself: https://www.gocomics.com/heathcliff \nI have a newspaper to run here!")
+            await chnl.send(choice(HMG_REJECTS))
         return
 
     msg = message.clean_content
