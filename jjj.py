@@ -2,6 +2,7 @@
 
 import csv
 import datetime
+import json
 import logging
 import os
 import pickle
@@ -108,12 +109,23 @@ async def new_super(old_super, chnl):
 
 
 class Knowledge:
-    pass
+    def to_dict(self):
+        return self.__dict__
+
+    @staticmethod
+    def from_dict(know_dict):
+        if "if_yes" in know_dict:
+            return Question(**know_dict)
+        else:
+            return Answer(**know_dict)
 
 
 class Question(Knowledge):
     def __init__(self, text, if_yes, if_no):
         self.text, self.if_yes, self.if_no = text, if_yes, if_no
+        for k, v in self.__dict__.items():
+            if type(v) == dict:
+                self.__dict__[k] = self.from_dict(v)
 
     async def play(self, chnl):
         ans = await ask(chnl, self.text)
@@ -129,6 +141,13 @@ class Question(Knowledge):
     def get_answers(self):
         yield from self.if_no.get_answers()
         yield from self.if_yes.get_answers()
+
+    def to_dict(self):
+        return {
+            "text": self.text,
+            "if_yes": self.if_yes.to_dict(),
+            "if_no": self.if_no.to_dict(),
+        }
 
 
 class Answer(Knowledge):
@@ -190,23 +209,23 @@ async def on_message(message):
         squad = choice(["Squadron", "SQUADRON"])
         wrap = "*" * randint(0, 3)
         chorus = wrap + skull + " " * randint(0, 1) + squad + "!" * randint(1, 6) + wrap
-        if (
-            datetime.datetime(2021, 2, 1, 1, 0, 0)
-            > datetime.datetime.now()
-            > datetime.datetime(2021, 1, 29, 23, 00, 37)
-        ):
-            with open(Path(CUR_DIR, "shouts.csv"), "a+", newline="") as shouts:
-                shout_writer = csv.writer(
-                    shouts, delimiter=" ", quotechar="|", quoting=csv.QUOTE_MINIMAL
-                )
-                shout_writer.writerow(
-                    [
-                        str(datetime.datetime.now()),
-                        message.author,
-                        message.content,
-                        chorus,
-                    ]
-                )
+        #        if (
+        #            datetime.datetime(2021, 2, 1, 1, 0, 0)
+        #            > datetime.datetime.now()
+        #            > datetime.datetime(2021, 1, 29, 23, 0, 37)
+        #        ):
+        #            with open(Path(CUR_DIR, "shouts.csv"), "a+", newline="") as shouts:
+        #                shout_writer = csv.writer(
+        #                    shouts, delimiter=" ", quotechar="|", quoting=csv.QUOTE_MINIMAL
+        #                )
+        #                shout_writer.writerow(
+        #                    [
+        #                        str(datetime.datetime.now()),
+        #                        message.author,
+        #                        message.content,
+        #                        chorus,
+        #                    ]
+        #                )
         await chnl.send(chorus)
 
     # Important Heathcliff Discourse
@@ -261,13 +280,12 @@ async def on_message(message):
             if i:
                 reply += "\nOr "
             rhythm = "".join(r)
-            reply += rhythm  # .replace("1","●").replace("2","◒").replace("0","○")
+            reply += rhythm
             if HALF_SHELL.match(rhythm):
                 reply += " " + TURTLE + POWER
         await message.reply(reply)
 
     elif is_turtle_power(msg):
-        # await message.reply("Turtle Power!")
         await message.add_reaction(TURTLE)
         await message.add_reaction(POWER)
 
@@ -281,11 +299,24 @@ async def on_message(message):
         return
     print(f'{message.author} said "{message.content}" on {message.guild}.')
     try:
-        print(f"{datetime.datetime.now()}: Loading shdb_{message.guild.id}.kb...")
-        file = open(Path(CUR_DIR, f"shdb_{message.guild.id}.kb"), "rb")
-        shdict[message.guild.id] = pickle.load(file)
-        file.close()
-        print(f"{datetime.datetime.now()}: Loaded shdb_{message.guild.id}.kb.")
+        print(f"{datetime.datetime.now()}: Seeking shdb_{message.guild.id}.json...")
+        jpath = Path(CUR_DIR, f"shdb_{message.guild.id}.json")
+        if jpath.is_file():
+            print(f"{datetime.datetime.now()}: Loading shdb_{message.guild.id}.json...")
+            with open(
+                Path(CUR_DIR, f"shdb_{message.guild.id}.json"), "rb"
+            ) as json_file:
+                shjson = json.load(json_file)
+                shdict[message.guild.id] = Knowledge.from_dict(shjson)
+            print(f"{datetime.datetime.now()}: Loaded shdb_{message.guild.id}.json.")
+        else:
+            print(
+                f"{datetime.datetime.now()}: shdb_{message.guild.id}.json not found..."
+            )
+            print(f"{datetime.datetime.now()}: Loading shdb_{message.guild.id}.kb...")
+            with open(Path(CUR_DIR, f"shdb_{message.guild.id}.kb"), "rb") as old_file:
+                shdict[message.guild.id] = pickle.load(file)
+            print(f"{datetime.datetime.now()}: Loaded shdb_{message.guild.id}.kb.")
     except FileNotFoundError:
         print(
             f"{datetime.datetime.now()}: Could not load shdb_{message.guild.id}.kb. Starting from scratch."
@@ -326,7 +357,6 @@ async def on_message(message):
         rcts = 1
         while randint(0, 9) >= rcts**2:
             emj = choice(EMOJJJIS)
-            print(emj)  # Not needed anymore?
             await message.add_reaction(emj)
             rcts += 1
         return
@@ -334,7 +364,6 @@ async def on_message(message):
     rcts = 1
     while randint(0, 9) >= rcts**2:
         emj = choice(EMOJJJIS)
-        print(emj)  # Not needed anymore?
         await message.add_reaction(emj)
         rcts += 1
     msg = await JJJ.wait_for("message", check=lambda m: m.author != JJJ.user)
@@ -342,11 +371,11 @@ async def on_message(message):
         await JJJ.change_presence(activity=NSM)
         await chnl.send("I see...")
         shdict[message.guild.id] = await shdict[message.guild.id].play(chnl)
-        file = open(Path(CUR_DIR, f"shdb_{message.guild.id}.kb"), "wb")
-        pickle.dump(shdict[message.guild.id], file)
-        file.close()
-        print(f"{datetime.datetime.now()}: Saved new shdb_{message.guild.id}.kb.")
+        with open(Path(CUR_DIR, f"shdb_{message.guild.id}.json"), "w") as fp:
+            json.dump(shdict[message.guild.id].to_dict(), fp)
+        print(f"{datetime.datetime.now()}: Saved new shdb_{message.guild.id}.json")
         await JJJ.change_presence(activity=NG)
 
 
-JJJ.run(TOKEN)
+if __name__ == "__main__":
+    JJJ.run(TOKEN)
