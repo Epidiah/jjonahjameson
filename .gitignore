@@ -1,5 +1,6 @@
 jjjdiscord.log
 shdb_*.kb
+shdb_*.json
 .env
 env/
 shouts.csv

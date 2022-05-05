@@ -1,0 +1,29 @@
+" jjonahjameson project-specific .vimrc
+
+" set somewhat thematically appropriate color scheme
+colorscheme gruvbox8
+
+" set local spellfile
+set spellfile=jjonahjameson.utf-8.add
+
+" change requirements.txt to python syntax
+augroup djangosettings
+  autocmd!
+  autocmd BufNewFile,BufRead requirements.txt set syntax=python
+  autocmd BufNewFile,BufRead requirements.txt set nospell
+augroup END
+
+" Fuck linting
+let g:pymode_lint = 0
+
+" Local Wiki
+let local_wiki = {}
+let local_wiki.path = expand('%:p:h') . '/vimwiki/'
+let local_wiki.name = "jjonahjameson"
+let local_wiki.auto_toc = 1
+let g:vimwiki_list = insert(g:vimwiki_list, local_wiki)
+
+" snippets, Abolishments, and other mappings
+let g:abolish_save_file=".local_vimrc"
+inoreabbrev <buffer> jr Jim Rockford
+

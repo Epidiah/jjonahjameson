@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 
-import csv
 import datetime
+import io
 import json
 import logging
 import os
-import pickle
+from pathlib import Path
+from random import choice, choices, randint
 import re
 
-from pathlib import Path
-from random import randint, choice, choices
-
-from dotenv import load_dotenv
+from TMNT import HALF_SHELL, bio_e, clean_text, is_turtle_power
+from editorial import stop_the_presses
 import discord
-
-from TMNT import is_turtle_power, bio_e, clean_text, HALF_SHELL
+from dotenv import load_dotenv
 import hirffgirth as hg
 
 #############
@@ -22,6 +20,7 @@ import hirffgirth as hg
 #############
 
 CUR_DIR = Path(os.getcwd())
+SHDICT = {}
 
 # regexy
 SKULL_SQUADRON = re.compile(r"s.{0,1}k.{0,1}u.{0,1}l.{0,18}s.{0,1}[q|kw]")
@@ -103,9 +102,9 @@ async def new_super(old_super, chnl):
     ans = await ask(chnl, "And you would answer...?")
     await chnl.send("That's what I thought! Now, go get me that menace, SPIDER-MAN!")
     if ans:
-        return Query(new_question, AlterEgo(new_name), old_super)
+        return Question(new_question, Answer(new_name), old_super)
     else:
-        return Query(new_question, old_super, AlterEgo(new_name))
+        return Question(new_question, old_super, Answer(new_name))
 
 
 class Knowledge:
@@ -142,6 +141,11 @@ class Question(Knowledge):
         yield from self.if_no.get_answers()
         yield from self.if_yes.get_answers()
 
+    def get_raw_text(self):
+        yield self.text
+        yield from self.if_no.get_raw_text()
+        yield from self.if_yes.get_raw_text()
+
     def to_dict(self):
         return {
             "text": self.text,
@@ -173,16 +177,67 @@ class Answer(Knowledge):
     def get_answers(self):
         yield self.text
 
-
-class Query(Question):
-    pass
-
-
-class AlterEgo(Answer):
-    pass
+    def get_raw_text(self):
+        yield self.text
 
 
-shdict = {}
+def load_shdb(guild_id, verbose=False):
+    jpath = Path(CUR_DIR, f"shdb_{guild_id}.json")
+    if jpath.is_file():
+        if verbose:
+            print(f"{datetime.datetime.now()}: Loading shdb_{guild_id}.json...")
+        with open(jpath, "r") as json_file:
+            shjson = json.load(json_file)
+            SHDICT[guild_id] = Knowledge.from_dict(shjson)
+        if verbose:
+            print(f"{datetime.datetime.now()}: Loaded shdb_{guild_id}.json.")
+    else:
+        if verbose:
+            print(
+                f"{datetime.datetime.now()}: Could not find shdb_{guild_id}.json. Starting from scratch."
+            )
+        SHDICT[guild_id] = Question(
+            "Do you wear a cape?",
+            Question(
+                "Is that the Eye of Agamotto around your neck?",
+                Answer("Doctor Strange"),
+                Answer("Storm"),
+            ),
+            Answer("SPIDER-MAN"),
+        )
+
+
+def get_lorem_list(guild_id):
+    with open("loremipsum.txt", "r") as loremdoc:
+        lorems = loremdoc.read().split()
+    load_shdb(guild_id)
+    return list(SHDICT[guild_id].get_raw_text()) + lorems
+
+async def collect_posts(message):
+    nearby_msgs = await message.channel.history(limit=6, around=message, oldest_first=True).flatten()
+    # past = message.created_at - datetime.timedelta(minutes=20)
+    # future = message.created_at + datetime.timedelta(minutes=20)
+    column_content = ""
+    original_msg_found = False
+    illo_url = None
+    for n_m in nearby_msgs:
+        # if past < n_m.created_at < future:
+        #     continue
+        if n_m.author != message.author:
+            if original_msg_found:
+                break
+            else:
+                column_content = ""
+                illo_url = None
+        else:
+            if not original_msg_found and n_m == message:
+                original_msg_found = True
+            column_content += n_m.clean_content + '\n'
+            if not illo_url and n_m.attachments:
+                for a in n_m.attachments:
+                    if not a.is_spoiler() and 'image' in a.content_type.lower():
+                        illo_url = a.url
+    return column_content[:-1], illo_url
 
 
 @JJJ.event
@@ -200,7 +255,6 @@ async def on_message(message):
         return
 
     # Skull Squadron SKULL SQUADRON!!!
-
     if SKULL_SQUADRON.search(message.content.lower()):
         await message.add_reaction(chr(int("2620", 16)))
         skull = choices(
@@ -209,27 +263,9 @@ async def on_message(message):
         squad = choice(["Squadron", "SQUADRON"])
         wrap = "*" * randint(0, 3)
         chorus = wrap + skull + " " * randint(0, 1) + squad + "!" * randint(1, 6) + wrap
-        #        if (
-        #            datetime.datetime(2021, 2, 1, 1, 0, 0)
-        #            > datetime.datetime.now()
-        #            > datetime.datetime(2021, 1, 29, 23, 0, 37)
-        #        ):
-        #            with open(Path(CUR_DIR, "shouts.csv"), "a+", newline="") as shouts:
-        #                shout_writer = csv.writer(
-        #                    shouts, delimiter=" ", quotechar="|", quoting=csv.QUOTE_MINIMAL
-        #                )
-        #                shout_writer.writerow(
-        #                    [
-        #                        str(datetime.datetime.now()),
-        #                        message.author,
-        #                        message.content,
-        #                        chorus,
-        #                    ]
-        #                )
         await chnl.send(chorus)
 
     # Important Heathcliff Discourse
-
     if JJJ.user in message.mentions and chnl.name == "important-heathcliff-discourse":
         check_archives = True
         if "today" in message.content:
@@ -271,6 +307,25 @@ async def on_message(message):
             await chnl.send(choice(HMG_REJECTS))
         return
 
+    # Editorial Page
+    if (
+        JJJ.user in message.mentions
+        and message.reference
+        and "print" in message.content.lower()
+    ):
+        column = await chnl.fetch_message(message.reference.message_id)
+        columnist = column.author.name
+        photo_url = str(column.author.avatar_url)
+        lorem_list = get_lorem_list(message.guild.id)
+        words, illo_url = await collect_posts(column)
+        headline = await stop_the_presses(
+            columnist, words, photo_url, lorem_list
+        )
+        headline.save(f"DailyBugle{message.guild.id}.jpg", format="JPEG")
+        with open(f"DailyBugle{message.guild.id}.jpg", "rb") as fp:
+            await message.channel.send("STOP THE PRESSES!", file=discord.File(fp, f"DailyBugle{datetime.datetime.now()}.jpg"))
+        return
+
     msg = message.clean_content
     msg = msg.replace("@" + JJJ.user.display_name, "")
 
@@ -298,40 +353,9 @@ async def on_message(message):
     if not JJJ.user in message.mentions:
         return
     print(f'{message.author} said "{message.content}" on {message.guild}.')
-    try:
-        print(f"{datetime.datetime.now()}: Seeking shdb_{message.guild.id}.json...")
-        jpath = Path(CUR_DIR, f"shdb_{message.guild.id}.json")
-        if jpath.is_file():
-            print(f"{datetime.datetime.now()}: Loading shdb_{message.guild.id}.json...")
-            with open(
-                Path(CUR_DIR, f"shdb_{message.guild.id}.json"), "rb"
-            ) as json_file:
-                shjson = json.load(json_file)
-                shdict[message.guild.id] = Knowledge.from_dict(shjson)
-            print(f"{datetime.datetime.now()}: Loaded shdb_{message.guild.id}.json.")
-        else:
-            print(
-                f"{datetime.datetime.now()}: shdb_{message.guild.id}.json not found..."
-            )
-            print(f"{datetime.datetime.now()}: Loading shdb_{message.guild.id}.kb...")
-            with open(Path(CUR_DIR, f"shdb_{message.guild.id}.kb"), "rb") as old_file:
-                shdict[message.guild.id] = pickle.load(file)
-            print(f"{datetime.datetime.now()}: Loaded shdb_{message.guild.id}.kb.")
-    except FileNotFoundError:
-        print(
-            f"{datetime.datetime.now()}: Could not load shdb_{message.guild.id}.kb. Starting from scratch."
-        )
-        shdict[message.guild.id] = Query(
-            "Do you wear a cape?",
-            Query(
-                "Is that the Eye of Agamotto around your neck?",
-                AlterEgo("Doctor Strange"),
-                AlterEgo("Storm"),
-            ),
-            AlterEgo("SPIDER-MAN"),
-        )
+    load_shdb(message.guild.id)
     if "who's who" in message.content.lower():
-        heroes = sorted(list(shdict[message.guild.id].get_answers()))
+        heroes = sorted(list(SHDICT[message.guild.id].get_answers()))
         boast = "Oh, I know them all! I've got dossiers on "
         for hero in heroes:
             if hero == "SPIDER-MAN":
@@ -370,9 +394,9 @@ async def on_message(message):
     if "spider" in msg.content.lower():
         await JJJ.change_presence(activity=NSM)
         await chnl.send("I see...")
-        shdict[message.guild.id] = await shdict[message.guild.id].play(chnl)
+        SHDICT[message.guild.id] = await SHDICT[message.guild.id].play(chnl)
         with open(Path(CUR_DIR, f"shdb_{message.guild.id}.json"), "w") as fp:
-            json.dump(shdict[message.guild.id].to_dict(), fp)
+            json.dump(SHDICT[message.guild.id].to_dict(), fp)
         print(f"{datetime.datetime.now()}: Saved new shdb_{message.guild.id}.json")
         await JJJ.change_presence(activity=NG)
 

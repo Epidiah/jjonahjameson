@@ -11,13 +11,17 @@ discord.py==1.7.3
 emoji==1.6.1
 html5lib==1.1
 idna==3.3
+lorem==0.1.1
 multidict==5.2.0
+Pillow==9.1.0
 pronouncing==0.2.0
+pycorpora==0.1.2
 python-dotenv==0.19.2
 requests==2.27.1
 sgmllib3k==1.0.0
 six==1.16.0
 soupsieve==2.3.1
+tracery==0.1.1
 typing_extensions==4.0.1
 urllib3==1.26.8
 webencodings==0.5.1
