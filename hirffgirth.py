@@ -1,8 +1,13 @@
 import io
+import re
 from datetime import datetime, timedelta
 
 import aiohttp
 from bs4 import BeautifulSoup
+
+DATE_MATCH = re.compile(
+    r"[\d]{4}[/|-][\d]{1,2}[/|-][\d]{1,2}|[\d]{1,2}[/|-][\d]{1,2}[/|-][\d]{4}"
+)
 
 
 async def get_hirffgirth(url):
@@ -12,11 +17,26 @@ async def get_hirffgirth(url):
                 return None
             else:
                 heathsoup = BeautifulSoup(await response.text(), "html5lib")
-                img_url = heathsoup.find_all("picture", class_="item-comic-image")[
-                    0
-                ].contents[0]["src"]
+                try:
+                    img_url = heathsoup.find_all("picture", class_="item-comic-image")[
+                        0
+                    ].contents[0]["src"]
+                except:
+                    return None
                 async with session.get(img_url) as image:
                     return io.BytesIO(await image.read())
+
+
+async def whichcliff(request: str):
+    request = request.lower()
+    if "today" in request:
+        yield await todays_hirffgirth()
+    if "yesterday" in request:
+        yield await hirffgirth_by_days_ago(1)
+    if "random" in request:
+        yield await random_hirffgirth()
+    for d_m in DATE_MATCH.findall(request):
+        yield await hirffgirth_by_date(d_m)
 
 
 def urlizer(date):

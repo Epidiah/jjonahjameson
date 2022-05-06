@@ -19,7 +19,7 @@ BODY_FONT = ImageFont.truetype("DejaVuSerif", size=14)
 
 def parse_attribution(columnist):
     columnist = columnist.split("#")[0]
-    words = columnist.split(' ')
+    words = columnist.split(" ")
     lines = []
     line = ""
     for word in words:
@@ -38,7 +38,7 @@ def filler(lorem_list):
 
 
 def layout_headline(text):
-    words = text.split(' ')
+    words = text.split(" ")
     lines = []
     line = ""
     for word in words:
@@ -52,84 +52,110 @@ def layout_headline(text):
     lines.append(line[:-1] + "\n")
     return "".join(lines)
 
-# TODO: Check against multiline_textbbox to see if you are within margins.
-def layout_body(text, lorem_list, byline_bottom):
-    prewords = text.split(' ')
+
+def layout_body(typeset, text, lorem_list, top, byline_bottom, illo):
+    prewords = (text + "\n" + filler(lorem_list)).split(" ")
     words = []
     for word in prewords:
-        if '\n' in word:
-            break_words = word.split('\n')
+        if "\n" in word:
+            break_words = word.split("\n")
             for bw in break_words[:-1]:
-                words.append(bw + '\n')
-                words.append('\n')
-            if word.endswith('\n'):
-                words.append(break_words[-1] + '\n')
-                words.append('\n')
+                words.append(bw + "\n")
+                words.append("\n")
+            if word.endswith("\n"):
+                words.append(break_words[-1] + "\n")
+                words.append("\n")
             else:
                 words.append(break_words[-1])
         else:
             words.append(word)
-    lines = []
-    line = ""
-    margin = 72
-    long_break = byline_bottom // 32
-    long_margin = 90
-    for word in words:
-        if word == '\n':
-            if line:
-                lines.append(line[:-1] + '\n')
-                line = ""
-            lines.append(line)
-        elif len(line) + len(word) <= margin:
-            line += word + " "
-        else:
-            lines.append(line[:-1] + "\n")
-            if len(lines) >= long_break:
-                margin = long_margin
-            line = word + " "
-    lines.append(line[:-1] + "\n")
-    lines.append('\n')
-    if len(lines) < 21:
-        ipsum = filler(lorem_list).split()
-        line = ""
-        for word in ipsum:
-            if len(line) + len(word) <= margin:
-                line += word + " "
-            else:
-                lines.append(line[:-1] + "\n")
-                if len(lines) >= long_break:
-                    margin = long_margin
-                line = word + " "
-        lines.append(line[:-1] + "\n\n")
-    return "".join(lines[:13]), "".join(lines[13:25])
-
-
-def layout_options(text):
-    layouts = []
-    # Find first sentence
-    first = re.match(r".{5,}?[!?.…]", text)
-    if first:
-        end = first.span()[1]
-        headline = first[0].strip(" .")
-        body = text[end:].strip()
+    positions = []  # list of tuples (left, top, right, bottom)
+    if illo:
+        illo_bottom = top + illo.size[1]
+        # First body: between byline and illustration
+        positions.append((188, top, 482, byline_bottom))
+        if illo_bottom >= 450:
+            # Illo will run the length of the article, only 1 more body
+            # Second body: between left margin and illustration
+            positions.append((60, byline_bottom + 1, 482, illo_bottom))
+        elif illo_bottom > byline_bottom + 1:
+            # Illo ends between byline bottom and bottom of page, 2 more bodies
+            # Second body: between left margin and illustration
+            positions.append((60, byline_bottom + 1, 482, illo_bottom))
+            # Third body: between left margin and right margin
+            positions.append((60, illo_bottom + 1, 740, 460))
+        elif illo_bottom <= byline_bottom:
+            # Illo ends before byline bottom, 2 more bodies
+            # Second body: between byline and right margin
+            positions.append((188, illo_bottom + 1, 740, byline_bottom))
+            # Third body: between left margin and right margin
+            positions.append((60, byline_bottom + 1, 740, 460))
     else:
-        lines = text.split('\n')
-        if len(lines) <= 3:
-            headline = text
-            body = text
+        # No illo, 2 bodies
+        # First body: between byline and right margin
+        positions.append((188, top, 740, byline_bottom))
+        # Second body: between left and right margin
+        positions.append((60, byline_bottom + 1, 740, 460))
+    bodies = []
+    bookmark = 0
+    for position in positions:
+        text = ""
+        while bookmark < len(words):
+            dim = typeset.multiline_textbbox(
+                (position[0], position[1]),
+                text + words[bookmark],
+                spacing=1.5,
+                align="left",
+                font=BODY_FONT,
+            )
+            if dim[3] > position[3]:
+                bodies.append({"text": text, "left": position[0], "top": position[1]})
+                break
+            # top = dim[3]
+            if words[bookmark] != "\n" and dim[2] < position[2]:
+                text += words[bookmark] + " "
+                bookmark += 1
+            else:
+                text = text[:-1] + "\n"
+                if words[bookmark] == "\n":
+                    bookmark += 1
+            if text[-3:] == "\n\n\n":
+                text = text[:-1]
+    return bodies
+
+
+def layout_options(text, header):
+    layouts = []
+    # Parse out a quote or the first sentence
+    quote = re.match(r'".*"', header)
+    first_sentence = re.match(r"^.{5,}?[!?.…]", header)
+    # If there's a discernable sentence at the beginning of the message
+    # make that sentence the headline
+    if first_sentence:
+        # If there is a quotation contained in the first sentence, preserve it.
+        if quote and quote.start() < first_sentence.end():
+            headline = header[: quote.end()]
         else:
-            headline = "\n".join(lines[:3])
-            body = "\n".join(lines[3:])
-    if '"' in headline:
-        headline += '…"'
-        body = '"…' + body
+            # Remove period at end of headline if it is not ellipses
+            if (
+                len(header) > first_sentence.end()
+                and header[first_sentence.end() + 1] != "."
+            ):
+                headline = first_sentence[0].strip(" .")
+            # Otherwise, construct ellipses
+            else:
+                headline = first_sentence[0] + ".."
+    # If there's no discernable sentence, take the first line
+    else:
+        headline = header.split("\n")[0]
+    body = text
     layouts.append({"headline": headline, "body": body})
     # Add new layout algorithms here.
     return layouts
 
 
 async def get_illo(illo_url):
-    if illo_url ==None:
+    if illo_url == None:
         return None
     try:
         async with aiohttp.ClientSession() as session:
@@ -146,19 +172,27 @@ async def get_illo(illo_url):
 async def take_photo(photo_url):
     if photo_url == "test":
         with open("test.webp", "rb") as image:
-            return  io.BytesIO(image.read())
+            return io.BytesIO(image.read())
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(photo_url) as response:
                 if response.status != 200:
                     with open("test.webp", "rb") as image:
-                        return  io.BytesIO(image.read())
+                        return io.BytesIO(image.read())
                 else:
                     async with session.get(photo_url) as image:
                         return io.BytesIO(await image.read())
     except:
         with open("test.webp", "rb") as image:
-            return  io.BytesIO(image.read())
+            return io.BytesIO(image.read())
+
+
+def pulp_photo(photo_stream, width, height):
+    with Image.open(photo_stream) as photo:
+        photo_converted = photo.convert("RGB")
+    photo_resized = ImageOps.contain(photo_converted, (width, height))
+    photo_autocontrasted = ImageOps.autocontrast(photo_resized, (0, 30))
+    return photo_autocontrasted.convert("RGBA")
 
 
 def typeset_byline(typeset, byline, top):
@@ -179,6 +213,7 @@ def typeset_byline(typeset, byline, top):
     )
     return dim
 
+
 def typeset_header(typeset):
     dim = typeset.multiline_textbbox(
         (400, 2),
@@ -189,7 +224,7 @@ def typeset_header(typeset):
     )
     line_width = 10
     top = dim[1]
-    bottom = dim[3] - line_width//2
+    bottom = dim[3] - line_width // 2
     typeset.line((0, top, 800, top), fill="gray", width=line_width)
     typeset.line((0, bottom, 800, bottom), fill="gray", width=line_width)
     typeset.multiline_text(
@@ -224,9 +259,9 @@ def typeset_header(typeset):
         align="right",
         font=HEADER_FONT,
     )
-    r = requests.get('http://wttr.in/NewYork?format=%C\n+%t')
-    if r.status_code == 200:
-        left_text = "\n".join((t.strip(' +') for t in r.text.split('\n')))
+    r = requests.get("http://wttr.in/NewYork?format=%C\n+%t")
+    if r.status_code == 200 and "unknown" not in r.text.lower():
+        left_text = "\n".join((t.strip(" +") for t in r.text.split("\n")))
     else:
         left_text = "SPIDER-MENACE?\nSee page E-2"
     typeset.multiline_text(
@@ -238,6 +273,7 @@ def typeset_header(typeset):
         font=HEADER_FONT,
     )
     return dim
+
 
 def typeset_headline(typeset, headline, top):
     dim = typeset.multiline_textbbox(
@@ -260,29 +296,25 @@ def typeset_headline(typeset, headline, top):
     return dim
 
 
-def typeset_body(typeset, body, left, top):
-    dim = typeset.multiline_textbbox(
-        (left, top),
-        body,
-        spacing=1.5,
-        align="left",
-        font=BODY_FONT,
-    )
-    typeset.multiline_text(
-        (left, top),
-        body,
-        fill="dimgray",
-        spacing=1.5,
-        align="left",
-        font=BODY_FONT,
-    )
-    return dim
+def typeset_body(typeset, bodies):
+    for body in bodies:
+        typeset.multiline_text(
+            (body["left"], body["top"]),
+            body["text"],
+            fill="dimgray",
+            spacing=1.5,
+            align="left",
+            font=BODY_FONT,
+        )
+    return None
 
 
-async def stop_the_presses(columnist, column, photo_url, lorem_list):
+async def stop_the_presses(
+    columnist, headline, column, photo_url, illo_url, lorem_list
+):
     # Preprocess text for paper
     byline = parse_attribution(columnist)
-    page_layout = layout_options(column)[0]
+    page_layout = layout_options(column, headline)[0]
     headline = layout_headline(page_layout["headline"])
 
     # Create base paper image and texture
@@ -305,11 +337,7 @@ async def stop_the_presses(columnist, column, photo_url, lorem_list):
 
     # Add columnist photo to paper
     profile_stream = await take_photo(photo_url)
-    with Image.open(profile_stream) as profile_pic:
-        pp_converted = profile_pic.convert("RGB")
-    pp_resized = ImageOps.contain(pp_converted, (120, 120))
-    pp_autoconstrasted = ImageOps.autocontrast(pp_resized, (0, 30))
-    pp = pp_autoconstrasted.convert("RGBA")
+    pp = pulp_photo(profile_stream, 120, 120)
 
     mask_draw = ImageDraw.Draw(profile_mask)
     mask_draw.ellipse(
@@ -322,27 +350,46 @@ async def stop_the_presses(columnist, column, photo_url, lorem_list):
     left = max(194, dim[-2] + 20)
     byline_bottom = dim[-1] - 1
 
-    # TODO: Add illo
+    # Grap Photo
+    illo_stream = await get_illo(illo_url)
+    if illo_stream:
+        illo = pulp_photo(illo_stream, 250, 250)
+        paper.paste(illo, (490, top))
+        typeset.rectangle(
+            (490, top, 490 + illo.width, top + illo.height),
+            fill=None,
+            outline="dimgray",
+            width=4,
+        )
+    else:
+        illo = None
 
     # Add text to paper
-    body = layout_body(page_layout["body"], lorem_list, byline_bottom)
-    dim = typeset_body(typeset, body[0], left, top + 4)
-    dim = typeset_body(typeset, body[1], 60, dim[-1] - 1)
+    bodies = layout_body(
+        typeset, page_layout["body"], lorem_list, top, byline_bottom, illo
+    )
+    typeset_body(typeset, bodies)
 
     # Pulp it all and return the paper image
     paper = ImageOps.grayscale(paper)
     paper = ImageChops.darker(paper, texture)
     return paper.filter(ImageFilter.BoxBlur(1)).filter(ImageFilter.DETAIL)
 
+
 # Testing Zone
 async def main():
-    columnist =  "Epidiah Ravachol (he/him)"
+    columnist = "Epidiah Ravachol (he/him)"
+    headline = "I'll be a genius in these parts tomorrow! But"
     column = "If this works, I'll be a genius in these parts tomorrow! But if it doesn't,\nI'll just keep plugging away."
     photo_url = "test"
+    illo_url = "https://pbs.twimg.com/media/FSFLgIVX0AIJTEf?format=png&name=900x900"
     with open("loremipsum.txt", "r") as fp:
         lorem_list = fp.read().split()
-    im = await stop_the_presses(columnist, column, photo_url, lorem_list)
+    im = await stop_the_presses(
+        columnist, headline, column, photo_url, illo_url, lorem_list
+    )
     im.show()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

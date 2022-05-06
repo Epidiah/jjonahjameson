@@ -5,35 +5,31 @@ import io
 import json
 import logging
 import os
+import re
+from functools import partial
 from pathlib import Path
 from random import choice, choices, randint
-import re
 
-from TMNT import HALF_SHELL, bio_e, clean_text, is_turtle_power
-from editorial import stop_the_presses
 import discord
 from dotenv import load_dotenv
-import hirffgirth as hg
+
+from editorial import stop_the_presses
+from hirffgirth import whichcliff
+from skull_squadron import SKULL_SQUADRON, skull_squadron_SKULL_SQUADRON
+from superherodb import load_shdb
+from TMNT import how_turtle_power, is_turtle_power, TURTLE, POWER
 
 #############
 # CONSTANTS #
 #############
 
 CUR_DIR = Path(os.getcwd())
-SHDICT = {}
-
-# regexy
-SKULL_SQUADRON = re.compile(r"s.{0,1}k.{0,1}u.{0,1}l.{0,18}s.{0,1}[q|kw]")
-DATE_MATCH = re.compile(
-    r"[\d]{4}[/|-][\d]{1,2}[/|-][\d]{1,2}|[\d]{1,2}[/|-][\d]{1,2}[/|-][\d]{4}"
-)
+SHDB = {}
 
 # Personality
 with open(Path(CUR_DIR, "emojjjis.txt"), "r") as file:
     mjs = file.read().split("\n")
 EMOJJJIS = [chr(int(mj, 16)) for mj in mjs]
-TURTLE = chr(int("1f422", 16))
-POWER = chr(int("1f50b", 16))
 HMG_COMMENTS = [
     "This one's a beaut.",
     "Damn funny, I'd say!",
@@ -52,10 +48,19 @@ HMG_REJECTS = [
     "Check the archives yourself: https://www.gocomics.com/heathcliff \nI have a newspaper to run here!",
 ]
 
+
+async def random_reactions(message):
+    reactions = 1
+    while randint(0, 9) >= reactions**2:
+        reactions += 1
+    for emoji in choices(EMOJJJIS, reactions):
+        await message.add_reaction(emoji)
+
+
 # Juicy Secrets
 load_dotenv()
 TOKEN = os.getenv("JJJ_TOKEN")
-NSM = discord.Game("Not Spider-Man")
+NSM = discord.Game("Get Me Spider-Man!")
 NG = discord.Game("?!? I've got deadlines!")
 
 # JJonahJameson is born
@@ -72,172 +77,62 @@ handler.setFormatter(
 )
 logger.addHandler(handler)
 
-
-async def ask(chnl, q):
-    while True:
-        await chnl.send(q)
-        rsp = await JJJ.wait_for("message", check=lambda x: x.author != JJJ.user)
-        if (
-            rsp.content.lower().startswith("yes")
-            or rsp.content.lower().startswith("yup")
-            or rsp.content.lower() == "y"
-        ):
-            return True
-        elif rsp.content.lower().startswith("no") or rsp.content.lower() == "n":
-            return False
-        else:
-            await chnl.send("Come on, YES or NO! This ain't a tough question!\n")
-
-
-async def new_super(old_super, chnl):
-    await chnl.send("Who are you, then?")
-    new_name = await JJJ.wait_for("message")
-    new_name = new_name.content
-    await chnl.send(
-        f"How am I supposed to keep track of you all?\nIf I were you and you were me, what yes or no question would you ask to tell me apart from {old_super.text}?"
-    )
-    new_question = await JJJ.wait_for("message")
-    print(new_question.content)
-    new_question = new_question.content
-    ans = await ask(chnl, "And you would answer...?")
-    await chnl.send("That's what I thought! Now, go get me that menace, SPIDER-MAN!")
-    if ans:
-        return Question(new_question, Answer(new_name), old_super)
-    else:
-        return Question(new_question, old_super, Answer(new_name))
-
-
-class Knowledge:
-    def to_dict(self):
-        return self.__dict__
-
-    @staticmethod
-    def from_dict(know_dict):
-        if "if_yes" in know_dict:
-            return Question(**know_dict)
-        else:
-            return Answer(**know_dict)
-
-
-class Question(Knowledge):
-    def __init__(self, text, if_yes, if_no):
-        self.text, self.if_yes, self.if_no = text, if_yes, if_no
-        for k, v in self.__dict__.items():
-            if type(v) == dict:
-                self.__dict__[k] = self.from_dict(v)
-
-    async def play(self, chnl):
-        ans = await ask(chnl, self.text)
-        if ans:
-            self.if_yes = await self.if_yes.play(chnl)
-        else:
-            self.if_no = await self.if_no.play(chnl)
-        return self
-
-    def __repr__(self):
-        return f"Question({self.text}, {self.if_yes}, {self.if_no})"
-
-    def get_answers(self):
-        yield from self.if_no.get_answers()
-        yield from self.if_yes.get_answers()
-
-    def get_raw_text(self):
-        yield self.text
-        yield from self.if_no.get_raw_text()
-        yield from self.if_yes.get_raw_text()
-
-    def to_dict(self):
-        return {
-            "text": self.text,
-            "if_yes": self.if_yes.to_dict(),
-            "if_no": self.if_no.to_dict(),
-        }
-
-
-class Answer(Knowledge):
-    def __init__(self, text):
-        self.text = text
-
-    async def play(self, chnl):
-        ans = await ask(chnl, f"Are you {self.text}?")
-        if ans:
-            if self.text == "SPIDER-MAN":
-                await chnl.send("NO YOU'RE NOT! QUIT WASTING MY TIME, PARKER!")
-            else:
-                await chnl.send(
-                    "That's what I thought! Now, go get me that menace, SPIDER-MAN!"
-                )
-            return self
-        else:
-            return await new_super(self, chnl)
-
-    def __repr__(self):
-        return f"Answer({self.text})"
-
-    def get_answers(self):
-        yield self.text
-
-    def get_raw_text(self):
-        yield self.text
-
-
-def load_shdb(guild_id, verbose=False):
-    jpath = Path(CUR_DIR, f"shdb_{guild_id}.json")
-    if jpath.is_file():
-        if verbose:
-            print(f"{datetime.datetime.now()}: Loading shdb_{guild_id}.json...")
-        with open(jpath, "r") as json_file:
-            shjson = json.load(json_file)
-            SHDICT[guild_id] = Knowledge.from_dict(shjson)
-        if verbose:
-            print(f"{datetime.datetime.now()}: Loaded shdb_{guild_id}.json.")
-    else:
-        if verbose:
-            print(
-                f"{datetime.datetime.now()}: Could not find shdb_{guild_id}.json. Starting from scratch."
-            )
-        SHDICT[guild_id] = Question(
-            "Do you wear a cape?",
-            Question(
-                "Is that the Eye of Agamotto around your neck?",
-                Answer("Doctor Strange"),
-                Answer("Storm"),
-            ),
-            Answer("SPIDER-MAN"),
-        )
-
-
-def get_lorem_list(guild_id):
+# Utility Functions
+def get_lorem_list(guild_id, current_dir):
     with open("loremipsum.txt", "r") as loremdoc:
         lorems = loremdoc.read().split()
-    load_shdb(guild_id)
-    return list(SHDICT[guild_id].get_raw_text()) + lorems
+    shdb = load_shdb(guild_id, current_dir)
+    return list(shdb.get_raw_text()) + lorems
 
-async def collect_posts(message):
-    nearby_msgs = await message.channel.history(limit=6, around=message, oldest_first=True).flatten()
-    # past = message.created_at - datetime.timedelta(minutes=20)
-    # future = message.created_at + datetime.timedelta(minutes=20)
-    column_content = ""
-    original_msg_found = False
+
+async def collect_neighbors(message, leeway=20):
+    """
+    Looks for continuous messages around the target message that are by the same
+    author and within `leeway` minutes of each other.
+
+    message: the target message to search around
+
+    returns a tuple:
+        a string of all continuous messages in range,
+        a string of the url of the first image to be attached to the messages
+    """
+    nearby_msgs = await message.channel.history(
+        limit=6, around=message, oldest_first=True
+    ).flatten()
+    too_old = message.created_at - datetime.timedelta(minutes=leeway)
+    too_new = message.created_at + datetime.timedelta(minutes=leeway)
+    target_msg_found = False
+    content = ""
     illo_url = None
+    # Review the nearby messages
     for n_m in nearby_msgs:
-        # if past < n_m.created_at < future:
-        #     continue
+        # Ignore messages more than 20 mintues older than target
+        if n_m.created_at < too_old:
+            continue
+        # Stop when messages are more than 20 minutes younger than target
+        if n_m.created_at > too_new:
+            break
         if n_m.author != message.author:
-            if original_msg_found:
+            # Stop at first message after target not by target's author
+            if target_msg_found:
                 break
+            # Otherwise, reset content
             else:
-                column_content = ""
+                content = ""
                 illo_url = None
         else:
-            if not original_msg_found and n_m == message:
-                original_msg_found = True
-            column_content += n_m.clean_content + '\n'
+            # Signal that the target message is in this run of messages
+            if n_m == message:
+                target_msg_found = True
+            # Message within time zone and by target message's author, so add
+            # it to the content
+            content += n_m.clean_content + "\n"
+            # if illo_url hasn't been found, check attachments for image
             if not illo_url and n_m.attachments:
                 for a in n_m.attachments:
-                    if not a.is_spoiler() and 'image' in a.content_type.lower():
+                    if not a.is_spoiler() and "image" in a.content_type.lower():
                         illo_url = a.url
-    return column_content[:-1], illo_url
+    return content[:-1], illo_url
 
 
 @JJJ.event
@@ -251,111 +146,74 @@ async def on_ready():
 async def on_message(message):
     chnl = message.channel
 
+    # Ignore messages from JJJ himself.
     if message.author == JJJ.user:
         return
 
-    # Skull Squadron SKULL SQUADRON!!!
-    if SKULL_SQUADRON.search(message.content.lower()):
-        await message.add_reaction(chr(int("2620", 16)))
-        skull = choices(
-            ["Skull", "SKULL", ":skull:", ":skull_crossbones:"], [49, 49, 1, 1]
-        )[0]
-        squad = choice(["Squadron", "SQUADRON"])
-        wrap = "*" * randint(0, 3)
-        chorus = wrap + skull + " " * randint(0, 1) + squad + "!" * randint(1, 6) + wrap
-        await chnl.send(chorus)
+    # Skull Squadron SKULL SQUADRON!
+    sksq = skull_squadron_SKULL_SQUADRON(message.content)
+    if sksq:
+        await message.add_reaction(SKULL_SQUADRON)
+        await message.reply(sksq)
 
-    # Important Heathcliff Discourse
+    # Important Heathcliff Discourse!
     if JJJ.user in message.mentions and chnl.name == "important-heathcliff-discourse":
-        check_archives = True
-        if "today" in message.content:
-            check_archives = False
-            hmg = await hg.todays_hirffgirth()
-            if hmg:
+        async for heathcliff in whichcliff(message.content):
+            if heathcliff:
                 await chnl.send(
-                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
+                    choice(HMG_COMMENTS), file=discord.File(heathcliff, "hrfgrf.gif")
                 )
-            else:
-                await chnl.send(choice(HMG_REJECTS))
-        if "yesterday" in message.content:
-            check_archives = False
-            hmg = await hg.hirffgirth_by_days_ago(1)
-            if hmg:
-                await chnl.send(
-                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
-                )
-            else:
-                await chnl.send(choice(HMG_REJECTS))
-        if "random" in message.content:
-            check_archives = False
-            hmg = await hg.random_hirffgirth()
-            if hmg:
-                await chnl.send(
-                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
-                )
-            else:
-                await chnl.send(choice(HMG_REJECTS))
-
-        for d_m in DATE_MATCH.findall(message.content):
-            check_archives = False
-            hmg = await hg.hirffgirth_by_date(d_m)
-            if hmg:
-                await chnl.send(
-                    choice(HMG_COMMENTS), file=discord.File(hmg, "hrfgrf.gif")
-                )
-        if check_archives:
+        else:
             await chnl.send(choice(HMG_REJECTS))
         return
 
-    # Editorial Page
+    # Stop the Presses!
     if (
         JJJ.user in message.mentions
         and message.reference
         and "print" in message.content.lower()
     ):
-        column = await chnl.fetch_message(message.reference.message_id)
-        columnist = column.author.name
-        photo_url = str(column.author.avatar_url)
-        lorem_list = get_lorem_list(message.guild.id)
-        words, illo_url = await collect_posts(column)
-        headline = await stop_the_presses(
-            columnist, words, photo_url, lorem_list
+        await random_reactions(message)
+        headline = await chnl.fetch_message(message.reference.message_id)
+        columnist = headline.author.name
+        photo_url = str(headline.author.avatar_url)
+        lorem_list = get_lorem_list(message.guild.id, CUR_DIR)
+        column, illo_url = await collect_neighbors(headline)
+        daily_bugle = await stop_the_presses(
+            columnist, headline.clean_content, column, photo_url, illo_url, lorem_list
         )
-        headline.save(f"DailyBugle{message.guild.id}.jpg", format="JPEG")
+        daily_bugle.save(f"DailyBugle{message.guild.id}.jpg", format="JPEG")
         with open(f"DailyBugle{message.guild.id}.jpg", "rb") as fp:
-            await message.channel.send("STOP THE PRESSES!", file=discord.File(fp, f"DailyBugle{datetime.datetime.now()}.jpg"))
+            await message.channel.send(
+                "STOP THE PRESSES!",
+                file=discord.File(fp, f"DailyBugle{datetime.datetime.now()}.jpg"),
+            )
         return
 
     msg = message.clean_content
     msg = msg.replace("@" + JJJ.user.display_name, "")
 
+    # Turtle Power!
+    # Avoid conflict with Get Me Spider-Man by forbiding how_turtle_power in
+    # the daily-bugle channel
     if JJJ.user in message.mentions and chnl.name != "daily-bugle":
-        reply = " "
-        for i, r in enumerate(bio_e(clean_text(msg))):
-            if i:
-                reply += "\nOr "
-            rhythm = "".join(r)
-            reply += rhythm
-            if HALF_SHELL.match(rhythm):
-                reply += " " + TURTLE + POWER
-        await message.reply(reply)
-
+        await message.reply(how_turtle_power(msg))
     elif is_turtle_power(msg):
         await message.add_reaction(TURTLE)
         await message.add_reaction(POWER)
 
-    chnls = [x.name for x in message.guild.channels]
-    if "daily-bugle" in chnls and chnl.name not in [
-        "daily-bugle",
-        "the-robot-testing-zone",
-    ]:
+    # Get Me Spider-Man!
+    # Confine game to the daily-bugle channel
+    if chnl.name not in ["daily-bugle", "the-robot-testing-zone"]:
         return
+    # You must tag JJJ in the daily-bugle channel to begin
     if not JJJ.user in message.mentions:
         return
-    print(f'{message.author} said "{message.content}" on {message.guild}.')
-    load_shdb(message.guild.id)
+    # Load the game state
+    SHDB[message.guild.id] = load_shdb(message.guild.id, CUR_DIR)
+    # Get a report from JJJ on all the superheros in the database
     if "who's who" in message.content.lower():
-        heroes = sorted(list(SHDICT[message.guild.id].get_answers()))
+        heroes = sorted(list(SHDB[message.guild.id].get_answers()))
         boast = "Oh, I know them all! I've got dossiers on "
         for hero in heroes:
             if hero == "SPIDER-MAN":
@@ -364,6 +222,7 @@ async def on_message(message):
         boast += "and that menace SPIDER-MAN!"
         await chnl.send(boast)
         return
+    # Just a little insight into JJJ's love life
     if "love" in message.content.lower():
         await chnl.send(
             choices(
@@ -378,28 +237,23 @@ async def on_message(message):
                 weights=[1, 5, 5, 5, 1, 5],
             )[0]
         )
-        rcts = 1
-        while randint(0, 9) >= rcts**2:
-            emj = choice(EMOJJJIS)
-            await message.add_reaction(emj)
-            rcts += 1
-        return
+    # The game begins
+    await random_reactions(message)
     await chnl.send("get me spider-man!".upper())
-    rcts = 1
-    while randint(0, 9) >= rcts**2:
-        emj = choice(EMOJJJIS)
-        await message.add_reaction(emj)
-        rcts += 1
-    msg = await JJJ.wait_for("message", check=lambda m: m.author != JJJ.user)
-    if "spider" in msg.content.lower():
+    input_func = partial(JJJ.wait_for, "message", check=lambda m: m.author != JJJ.user)
+    msg = await input_func()
+    if "spide" in msg.content.lower():
         await JJJ.change_presence(activity=NSM)
         await chnl.send("I see...")
-        SHDICT[message.guild.id] = await SHDICT[message.guild.id].play(chnl)
+        SHDB[message.guild.id] = await SHDB[message.guild.id].play(
+            chnl.send, input_func
+        )
+        # When the game is over, save the database
         with open(Path(CUR_DIR, f"shdb_{message.guild.id}.json"), "w") as fp:
-            json.dump(SHDICT[message.guild.id].to_dict(), fp)
-        print(f"{datetime.datetime.now()}: Saved new shdb_{message.guild.id}.json")
+            json.dump(SHDB[message.guild.id].to_dict(), fp)
         await JJJ.change_presence(activity=NG)
 
 
 if __name__ == "__main__":
+    print("Running...")
     JJJ.run(TOKEN)
