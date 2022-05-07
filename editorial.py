@@ -127,7 +127,8 @@ def layout_body(typeset, text, lorem_list, top, byline_bottom, illo):
 def layout_options(text, header):
     layouts = []
     # Parse out a quote or the first sentence
-    quote = re.match(r'".*"', header)
+    quote = re.search(r'".*"', header)
+    quote_in_header= '"' in header
     first_sentence = re.match(r"^.{5,}?[!?.…]", header)
     # If there's a discernable sentence at the beginning of the message
     # make that sentence the headline
@@ -136,15 +137,15 @@ def layout_options(text, header):
         if quote and quote.start() < first_sentence.end():
             headline = header[: quote.end()]
         else:
-            # Remove period at end of headline if it is not ellipses
+            # Preserve ellipses
             if (
-                len(header) > first_sentence.end()
-                and header[first_sentence.end() + 1] != "."
+                len(header) > len(first_sentence.group(0))
+                and header[first_sentence.end() + 1] == "."
             ):
-                headline = first_sentence[0].strip(" .")
+                headline = first_sentence[0] + ".."
             # Otherwise, construct ellipses
             else:
-                headline = first_sentence[0] + ".."
+                headline = first_sentence[0].strip(" .")
     # If there's no discernable sentence, take the first line
     else:
         headline = header.split("\n")[0]

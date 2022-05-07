@@ -53,7 +53,7 @@ async def random_reactions(message):
     reactions = 1
     while randint(0, 9) >= reactions**2:
         reactions += 1
-    for emoji in choices(EMOJJJIS, reactions):
+    for emoji in choices(EMOJJJIS, k=reactions):
         await message.add_reaction(emoji)
 
 
