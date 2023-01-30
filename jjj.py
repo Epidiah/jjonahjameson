@@ -156,6 +156,12 @@ async def on_message(message):
         await message.add_reaction(SKULL_SQUADRON)
         await message.reply(sksq)
 
+    # Trivia Assistance
+    if chnl.name == "current-year-questions":
+        await message.add_reaction(chr(int("2705", 16)))
+        await message.add_reaction(chr(int("2753", 16)))
+        await message.add_reaction(chr(int("274C", 16)))
+
     # Important Heathcliff Discourse!
     if JJJ.user in message.mentions and chnl.name == "important-heathcliff-discourse":
         async for heathcliff in whichcliff(message.content):
